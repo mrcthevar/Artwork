@@ -32,7 +32,7 @@ function SafeImage({ src, alt, className }: { src: string; alt: string; classNam
           <p className="font-serif italic text-gold/40 text-sm mb-2 px-4 line-clamp-2">{alt}</p>
           <p className="text-[9px] uppercase tracking-widest text-white/5">Visual Data Lost in Archive</p>
           <div className="w-12 h-12 mt-8 rounded-full border border-gold/5 flex items-center justify-center">
-             <Camera className="h-4 w-4 text-gold/10" />
+            <Camera className="h-4 w-4 text-gold/10" />
           </div>
         </div>
       )}
@@ -41,25 +41,26 @@ function SafeImage({ src, alt, className }: { src: string; alt: string; classNam
 }
 
 export default function App() {
-  const [selectedPainting, setSelectedPainting] = useState<Painting | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [activeCategory, setActiveCategory] = useState('All');
-  const [isNightMode, setIsNightMode] = useState<boolean>(true);
-  const [sortBy, setSortBy] = useState<'default' | 'artist'>('default');
-  
-  // Dynamic Collection
   const [paintings, setPaintings] = useState<Painting[]>(FAMOUS_PAINTINGS);
   const [page, setPage] = useState(1);
   const [isFetching, setIsFetching] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedEra, setSelectedEra] = useState<string>('ALL');
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [selectedPainting, setSelectedPainting] = useState<Painting | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<'DEFAULT' | 'ARTIST' | 'YEAR'>('DEFAULT');
 
   const loadMore = useCallback(async () => {
     if (isFetching || !hasMore) return;
     setIsFetching(true);
     try {
-      const newWorks = await fetchArtworks(page, 50);
-      if (newWorks.length === 0) {
+      const result = await fetchArtworks(page, 100);
+      const newWorks = result.paintings;
+      if (!result.hasMore) {
         setHasMore(false);
       } else {
         setPaintings(prev => {
@@ -77,347 +78,297 @@ export default function App() {
   }, [page, isFetching, hasMore]);
 
   useEffect(() => {
-    // Load initial batch if needed
-    if (paintings.length < 50) {
+    if (paintings.length < 100) {
       loadMore();
     }
   }, [loadMore, paintings.length]);
 
-  useEffect(() => {
-    if (!isNightMode) {
-      document.documentElement.classList.add('theme-day');
-    } else {
-      document.documentElement.classList.remove('theme-day');
+  const sortedPaintings = useMemo(() => {
+    let filtered = [...paintings];
+    if (selectedEra !== 'ALL') {
+      filtered = filtered.filter(p => p.category.toUpperCase().includes(selectedEra));
     }
-  }, [isNightMode]);
-
-  const categories = useMemo(() => {
-    const cats = new Set(paintings.map(p => p.category));
-    return ['All', ...Array.from(cats)].slice(0, 15); // Limit UI categories
-  }, [paintings]);
-
-  const filteredPaintings = useMemo(() => {
-    const filtered = paintings.filter(p => {
-      const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                           p.artist.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesCategory = activeCategory === 'All' || p.category === activeCategory;
-      return matchesSearch && matchesCategory;
-    });
-
-    if (sortBy === 'artist') {
-      return [...filtered].sort((a, b) => a.artist.localeCompare(b.artist));
+    if (selectedCategory !== 'ALL') {
+      filtered = filtered.filter(p => p.category === selectedCategory);
     }
-    
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(p =>
+        p.title.toLowerCase().includes(q) ||
+        p.artist.toLowerCase().includes(q)
+      );
+    }
+    if (sortBy === 'ARTIST') {
+      filtered.sort((a, b) => a.artist.localeCompare(b.artist));
+    } else if (sortBy === 'YEAR') {
+      filtered.sort((a, b) => {
+        const yearA = parseInt(a.year) || 0;
+        const yearB = parseInt(b.year) || 0;
+        return yearA - yearB;
+      });
+    }
     return filtered;
-  }, [searchTerm, activeCategory, paintings, sortBy]);
+  }, [paintings, selectedEra, selectedCategory, searchQuery, sortBy]);
 
-  const handleSelectPainting = async (painting: Painting) => {
-    setSelectedPainting(painting);
-    if (!painting.analysis) {
-      setAnalyzing(true);
-      try {
-        const analysis = await analyzePainting(painting.title, painting.artist);
-        painting.analysis = analysis;
-        setSelectedPainting({ ...painting });
-      } catch (error) {
-        console.error("Analysis failed:", error);
-      } finally {
-        setAnalyzing(false);
-      }
+  const handleAnalyze = useCallback(async (painting: Painting) => {
+    setIsAnalyzing(true);
+    try {
+      const analysis = await analyzePainting(painting);
+      setSelectedPainting({ ...painting, analysis } as Painting & { analysis: any });
+    } catch (error) {
+      console.error("Analysis failed:", error);
+    } finally {
+      setIsAnalyzing(false);
     }
-  };
+  }, []);
+
+  const toggleEtherealMode = () => setDarkMode(prev => !prev);
+
+  const eras = ['ALL', 'RENAISSANCE', 'BAROQUE', 'POST-IMPRESSIONISM', 'ROMANTICISM', 'REALISM', 'MODERN', 'EXPRESSIONISM', 'IMPRESSIONISM'];
+  const categories = ['ALL', 'PAINTING'];
 
   return (
-    <div className="min-h-screen bg-theme-main font-sans text-theme-base selection:bg-gold selection:text-black antialiased transition-colors duration-700">
-      {/* Background Ambience */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden select-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-gold/5 blur-[120px] rounded-full mix-blend-screen animate-pulse" />
-        <div className="absolute bottom-[-5%] right-[-5%] w-[30%] h-[30%] bg-gold/5 blur-[100px] rounded-full" />
-      </div>
-
-      {/* Navigation */}
-      <nav className="fixed top-8 z-50 w-full px-8 pointer-events-none">
-        <div className="mx-auto flex max-w-[1400px] items-center justify-between pointer-events-auto">
-          <h1 
-            className="font-serif text-2xl tracking-tighter text-theme-base font-light cursor-pointer flex items-center gap-4 glass px-6 py-3 rounded-full" 
-            onClick={() => setSelectedPainting(null)}
-          >
-            <div className="w-8 h-8 rounded-full bg-gold/10 flex items-center justify-center text-sm italic text-gold font-bold">A</div>
-            <span className="hidden sm:block">Artwork</span>
-          </h1>
-          
+    <div className={`min-h-screen transition-colors duration-1000 ${darkMode ? 'bg-black text-gold' : 'bg-[#1a1610] text-[#c9a96e]'}`}>
+      {/* Header */}
+      <header className="sticky top-0 z-50 glass border-b border-theme-border/50 backdrop-blur-xl">
+        <div className="max-w-[90vw] mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="hidden md:flex items-center glass rounded-full px-2 overflow-hidden">
-              <Search className="h-4 w-4 ml-4 text-theme-mute" />
-              <input 
-                type="text" 
-                placeholder="Search repository..." 
-                className="bg-transparent py-3 px-4 text-xs font-medium tracking-wide focus:outline-none w-48 lg:w-64 placeholder:text-theme-mute/30"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <div className="w-10 h-10 rounded-full border border-gold/30 flex items-center justify-center bg-gradient-to-br from-gold/10 to-transparent">
+              <span className="font-serif text-gold text-lg">M</span>
             </div>
-
-            <button 
-              onClick={() => setIsNightMode(!isNightMode)}
-              className="w-12 h-12 rounded-full glass flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+            <div>
+              <h1 className="font-serif text-xl tracking-tight text-gold select-none">Millennium <span className="font-light italic text-gold/60">Archive</span></h1>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSortBy(prev => prev === 'DEFAULT' ? 'ARTIST' : prev === 'ARTIST' ? 'YEAR' : 'DEFAULT')}
+              className="glass px-4 py-2 rounded-full text-[10px] uppercase tracking-widest hover:bg-gold/10 transition-colors select-none"
             >
-              {isNightMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {sortBy === 'DEFAULT' && <ArrowDownAz className="inline w-3 h-3 mr-1" />}DEFAULT SORT
             </button>
-
-            <button className="w-12 h-12 rounded-full glass flex items-center justify-center lg:hidden">
-              <Menu className="h-4 w-4" />
+            <button
+              onClick={toggleEtherealMode}
+              className="glass p-2 rounded-full hover:bg-gold/10 transition-colors"
+              aria-label="Switch to Ethereal Mode"
+            >
+              {darkMode ? <Sun className="w-4 h-4 text-gold/60" /> : <Moon className="w-4 h-4 text-gold/60" />}
+            </button>
+            <div className="relative group">
+              <input
+                type="text"
+                placeholder="Search the Archive..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="glass pl-9 pr-4 py-2 rounded-full text-[11px] w-64 focus:w-80 transition-all bg-transparent border border-theme-border/30 placeholder:text-theme-mute/40 focus:outline-none focus:border-gold/30 text-gold/70"
+              />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gold/30" />
+            </div>
+            <button
+              onClick={() => setIsMenuOpen(prev => !prev)}
+              className="glass p-2 rounded-full hover:bg-gold/10 transition-colors md:hidden"
+            >
+              <Menu className="w-4 h-4 text-gold/60" />
             </button>
           </div>
         </div>
-      </nav>
+      </header>
 
-      <main className="pt-36 pb-24 px-8 max-w-[1600px] mx-auto overflow-visible">
-        <AnimatePresence mode="wait">
-          {!selectedPainting ? (
-            <motion.div 
-              key="gallery"
+            {/* Main Content */}
+      <main className="max-w-[90vw] mx-auto px-4 py-8">
+        {/* Stats Banner */}
+        <div className="glass rounded-[2rem] p-8 mb-8 border border-theme-border/30">
+          <div className="flex items-center gap-4 mb-4">
+            <h2 className="font-serif text-2xl tracking-tight">MILLENNIUM ARCHIVE</h2>
+            <div className="w-12 h-[1px] bg-gold/20" />
+          </div>
+          <h3 className="font-serif italic text-gold/40 text-lg mb-6">The Grammar of Light.</h3>
+          <div className="flex flex-wrap gap-8 text-[10px] uppercase tracking-widest text-theme-mute/60">
+            <div>
+              <p className="text-gold/60 mb-1">Collection Size</p>
+              <p className="font-mono text-lg text-gold/80">{paintings.length}</p>
+              <p className="text-[9px]">WORKS</p>
+            </div>
+            <div>
+              <p className="text-gold/60 mb-1">Database Source</p>
+              <p className="font-mono text-gold/80">Cleveland Museum of Art</p>
+            </div>
+            <div>
+              <p className="text-gold/60 mb-1">Analysis Engine</p>
+              <p className="font-mono text-gold/80">Optic-AI v4.2</p>
+            </div>
+          </div>
+        </div>
+
+                {/* Era Filter Buttons */}
+        <div className="flex flex-wrap gap-2 mb-8">
+          {eras.map(era => (
+            <button
+              key={era}
+              onClick={() => setSelectedEra(era)}
+              className={`px-4 py-2 rounded-full text-[10px] uppercase tracking-widest transition-all ${
+                selectedEra === era
+                  ? 'bg-gold/20 text-gold border border-gold/30'
+                  : 'glass text-theme-mute/60 border border-theme-border/20 hover:border-gold/20'
+              }`}
+            >
+              {era}
+            </button>
+          ))}
+          {categories.map(cat => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`px-4 py-2 rounded-full text-[10px] uppercase tracking-widest transition-all ${
+                selectedCategory === cat
+                  ? 'bg-gold/20 text-gold border border-gold/30'
+                  : 'glass text-theme-mute/60 border border-theme-border/20 hover:border-gold/20'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+                {/* Gallery Grid */}
+        <AnimatePresence>
+          <motion.div
+            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.8 }}
+          >
+            {sortedPaintings.map((painting, idx) => (
+              <motion.div
+                key={painting.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.5, delay: Math.min(idx * 0.03, 0.5) }}
+                className="group glass rounded-[1.5rem] overflow-hidden border border-theme-border/20 hover:border-gold/20 transition-all duration-500 cursor-pointer"
+                onClick={() => setSelectedPainting(painting)}
+              >
+                <div className="aspect-[4/3] overflow-hidden bg-theme-side">
+                  <SafeImage
+                    src={painting.imageUrl}
+                    alt={painting.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000"
+                  />
+                </div>
+                <div className="p-5 space-y-2">
+                  <p className="text-[10px] uppercase tracking-widest text-gold/40">{painting.year}</p>
+                  <p className="text-[8px] uppercase tracking-widest text-theme-mute/40">{painting.category}</p>
+                  <h4 className="font-serif text-sm text-gold/80 truncate">{painting.title}</h4>
+                  <p className="text-[10px] text-theme-mute/60 truncate">{painting.artist}</p>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        </AnimatePresence>
+
+                {/* Load More Button */}
+        {hasMore && (
+          <div className="flex justify-center mt-12">
+            <button
+              onClick={loadMore}
+              disabled={isFetching}
+              className="glass px-8 py-3 rounded-full text-[10px] uppercase tracking-widest hover:bg-gold/10 transition-all disabled:opacity-50 flex items-center gap-2"
+            >
+              {isFetching && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isFetching ? 'Expanding Repository' : 'Expand Collection'}
+            </button>
+          </div>
+        )}
+
+                {/* Detail Modal */}
+        <AnimatePresence>
+          {selectedPainting && (
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.8 }}
+              className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+              onClick={() => setSelectedPainting(null)}
             >
-              {/* Hero Header */}
-              <div className="mb-24 text-center">
-                <motion.div
-                  initial={{ y: 30, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ duration: 1, ease: [0.23, 1, 0.32, 1] }}
-                >
-                  <p className="font-mono text-[10px] uppercase tracking-[0.8em] text-gold/60 mb-8 select-none">
-                    Digital Visual Repository
-                  </p>
-                  <h2 className="text-7xl md:text-[10rem] font-serif font-light tracking-tighter leading-[0.85] mb-12 select-none text-theme-base text-balance mx-auto max-w-6xl">
-                    The <span className="italic text-gold">Grammar</span> of Light.
-                  </h2>
-                  
-                  <div className="flex flex-wrap items-center justify-center gap-10 text-theme-mute text-[10px] uppercase tracking-[0.4em] font-medium opacity-40">
-                    <div className="flex items-center gap-3">
-                      <div className="w-1.5 h-1.5 rounded-full bg-gold/50" />
-                      <span>{paintings.length} Curated Works</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-1.5 h-1.5 rounded-full bg-gold/50" />
-                      <span>Artwork Repository Access</span>
-                    </div>
-                  </div>
-                </motion.div>
-              </div>
-
-              {/* Enhanced Categories */}
-              <div className="mb-20 glass rounded-[2rem] p-3 max-w-fit mx-auto sticky top-28 z-40">
-                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
-                  {categories.map((cat) => (
-                    <button
-                      key={cat}
-                      onClick={() => setActiveCategory(cat)}
-                      className={`px-8 py-3.5 rounded-[1.5rem] text-[10px] font-bold uppercase tracking-[0.2em] transition-all whitespace-nowrap ${
-                        activeCategory === cat 
-                        ? 'bg-theme-base text-theme-main shadow-lg scale-100' 
-                        : 'text-theme-mute hover:text-theme-base hover:bg-white/5 scale-95 opacity-70'
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Refined Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-x-10 gap-y-16">
-                {filteredPaintings.map((painting, index) => (
-                  <motion.div 
-                    key={painting.id}
-                    layoutId={`painting-${painting.id}`}
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ 
-                      delay: (index % 12) * 0.05, 
-                      duration: 0.8,
-                      ease: [0.23, 1, 0.32, 1]
-                    }}
-                    onClick={() => handleSelectPainting(painting)}
-                    className="group relative cursor-pointer hover-lift"
-                  >
-                    <div className="relative aspect-[3/4] overflow-hidden rounded-3xl glass shadow-xl">
-                      <SafeImage 
-                        src={painting.imageUrl} 
-                        alt={painting.title}
-                        className="h-full w-full object-cover transition-all duration-[2.5s] group-hover:scale-105 opacity-80 group-hover:opacity-100"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60" />
-                      
-                      <div className="absolute bottom-6 left-6 right-6 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-500">
-                        <div className="h-8 w-8 rounded-full glass flex items-center justify-center mb-3">
-                          <Plus className="h-4 w-4 text-gold" />
-                        </div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-gold mb-1">Explore Visuals</p>
-                      </div>
-                    </div>
-                    
-                    <div className="mt-8 px-2">
-                      <h3 className="font-serif text-2xl font-light leading-tight mb-2 text-theme-base line-clamp-1 group-hover:text-gold transition-colors duration-500">
-                        {painting.title}
-                      </h3>
-                      <p className="text-[10px] text-theme-mute uppercase tracking-[0.3em] font-bold truncate opacity-60">
-                        {painting.artist}
-                      </p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-
-              {/* Load More Trigger */}
-              {hasMore && (
-                <div className="mt-32 flex justify-center">
-                  <button 
-                    onClick={loadMore}
-                    disabled={isFetching}
-                    className="group flex flex-col items-center gap-6"
-                  >
-                    <div className="w-20 h-20 rounded-full border border-theme glass flex items-center justify-center transition-all group-hover:border-gold group-hover:scale-110">
-                      {isFetching ? (
-                        <Loader2 className="h-8 w-8 animate-spin text-gold" />
-                      ) : (
-                        <Plus className="h-8 w-8 text-gold" />
-                      )}
-                    </div>
-                    <span className="font-mono text-[11px] uppercase tracking-[0.6em] text-theme-mute group-hover:text-gold transition-colors">
-                      {isFetching ? 'Expanding Repository' : 'Expand Collection'}
-                    </span>
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          ) : (
-            <motion.div 
-              key="detail"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.8 }}
-              className="max-w-[1400px] mx-auto"
-            >
-              <div className="flex items-center justify-between mb-16">
-                <button 
+              <div className="absolute inset-0 bg-black/80 backdrop-blur-xl" />
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="relative glass rounded-[2rem] max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-gold/20"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
                   onClick={() => setSelectedPainting(null)}
-                  className="group flex items-center gap-4 text-[10px] text-theme-mute hover:text-theme-base transition-all uppercase tracking-[0.4em] font-bold glass px-6 py-3 rounded-full"
+                  className="absolute top-4 right-4 z-10 glass p-2 rounded-full hover:bg-gold/10 transition-colors"
                 >
-                  <ChevronLeft className="h-4 w-4" />
-                  Close Archive
+                  <ChevronLeft className="w-5 h-5 text-gold/60" />
                 </button>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
-                {/* Image Section */}
-                <div className="lg:col-span-7 xl:col-span-8 lg:sticky lg:top-36">
-                  <motion.div 
-                    layoutId={`painting-${selectedPainting.id}`}
-                    className="relative group transition-all duration-1000"
-                  >
-                    <div className="relative overflow-hidden rounded-[2.5rem] glass p-2 shadow-2xl transition-all duration-1000">
-                      <SafeImage 
-                        src={selectedPainting.imageUrl} 
-                        alt={selectedPainting.title}
-                        className="w-full h-auto max-h-[80vh] object-contain rounded-[2rem] mx-auto shadow-2xl"
+                <div className="grid md:grid-cols-2 gap-0">
+                  <div className="bg-theme-side aspect-[4/3] md:aspect-auto md:h-full flex items-center justify-center">
+                    <SafeImage
+                      src={selectedPainting.imageUrl}
+                      alt={selectedPainting.title}
+                      className="w-full h-full object-contain p-4"
+                    />
+                  </div>
+                  <div className="p-8 space-y-6">
+                    <div className="space-y-2">
+                      <p className="text-[10px] uppercase tracking-widest text-gold/40">{selectedPainting.year}</p>
+                      <p className="text-[9px] uppercase tracking-widest text-theme-mute/40">{selectedPainting.category}</p>
+                      <h2 className="font-serif text-2xl text-gold/90">{selectedPainting.title}</h2>
+                      <p className="font-serif italic text-gold/50 text-lg">{selectedPainting.artist}</p>
+                    </div>
+                    <div className="space-y-4">
+                      <TechnicalSegment
+                        icon={<Camera className="w-4 h-4" />}
+                        title="Visual Analysis"
+                        content={selectedPainting.analysis?.visualAnalysis || "Awaiting sensory deconstruction..."}
+                      />
+                      <TechnicalSegment
+                        icon={<Film className="w-4 h-4" />}
+                        title="Cinematic Context"
+                        content={selectedPainting.analysis?.cinematicContext || "Awaiting cinematic mapping..."}
+                      />
+                      <TechnicalSegment
+                        icon={<History className="w-4 h-4" />}
+                        title="Provenance"
+                        content={selectedPainting.description || "Provenance context"}
                       />
                     </div>
-                  </motion.div>
-                </div>
-
-                {/* Info Section */}
-                <div className="lg:col-span-5 xl:col-span-4 space-y-12">
-                  <header className="space-y-8">
-                    <div className="space-y-4">
-                      <h2 className="font-serif text-6xl md:text-8xl font-light tracking-tighter leading-[0.9] text-theme-base text-balance">
-                        {selectedPainting.title}
-                      </h2>
-                      <div className="flex flex-wrap items-center gap-4 text-xl font-serif italic text-theme-mute opacity-60">
-                        <span>{selectedPainting.artist}</span>
-                        <span className="w-1 h-1 rounded-full bg-gold/30" />
-                        <span>{selectedPainting.year}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="p-8 rounded-[2rem] glass border-gold/10 group shadow-xl">
-                      <p className="text-lg leading-[1.7] text-theme-mute font-light text-balance opacity-80">
-                        {selectedPainting.description}
-                      </p>
-                    </div>
-                  </header>
-
-                  {analyzing ? (
-                    <div className="py-20 flex flex-col items-center justify-center glass rounded-[2.5rem] animate-pulse">
-                      <Loader2 className="h-8 w-8 animate-spin text-gold mb-6 opacity-30" />
-                      <p className="text-[10px] font-mono uppercase tracking-[0.6em] text-theme-mute/40">Analyzing Visual DNA...</p>
-                    </div>
-                  ) : selectedPainting.analysis && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="space-y-12"
+                    <button
+                      onClick={() => handleAnalyze(selectedPainting)}
+                      disabled={isAnalyzing}
+                      className="glass px-6 py-3 rounded-full text-[10px] uppercase tracking-widest hover:bg-gold/10 transition-all disabled:opacity-50 w-full flex items-center justify-center gap-2"
                     >
-                      <div className="flex flex-wrap gap-2">
-                        {selectedPainting.analysis.tags.map((tag) => (
-                          <span key={tag} className="px-5 py-2 rounded-full glass border-gold/10 text-gold text-[9px] uppercase tracking-widest font-bold">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-12">
-                        <TechnicalSegment 
-                          icon={<Film className="h-4 w-4" />}
-                          title="Optical Geometry"
-                          content={selectedPainting.analysis.cinematography}
-                        />
-                        
-                        <TechnicalSegment 
-                          icon={<Camera className="h-4 w-4" />}
-                          title="Photographic Science"
-                          content={selectedPainting.analysis.photography}
-                        />
-
-                        <div className="relative p-8 rounded-[2rem] bg-gold/[0.02] border border-gold/[0.05]">
-                          <div className="flex items-center gap-3 text-gold/40 uppercase tracking-[0.4em] text-[9px] font-bold mb-4">
-                            <History className="h-3 w-3" />
-                            Provenance context
-                          </div>
-                          <p className="text-base leading-relaxed text-theme-mute italic font-serif">
-                             {selectedPainting.analysis.historicalContext}
-                          </p>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
+                      {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />}
+                      {isAnalyzing ? 'Deconstructing...' : 'Deconstruct Masterpiece'}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
-      </main>
 
-      <footer className="py-24 px-8 border-t border-theme-border/50 text-center glass mt-40">
-        <div className="max-w-2xl mx-auto opacity-40">
-          <p className="font-mono text-[9px] uppercase tracking-[0.8em] text-theme-mute mb-8 select-none">Artwork · Sensory Deconstruct v4.2</p>
-          <div className="flex flex-wrap justify-center gap-8 text-[9px] uppercase tracking-[0.4em] text-theme-mute font-bold">
-            <span className="hover:text-gold transition-colors cursor-help">Technical Repository</span>
-            <span className="hover:text-gold transition-colors cursor-help">Open Access Protocol</span>
-            <span className="hover:text-gold transition-colors cursor-help">MMXXIV</span>
+                {/* Footer */}
+        <footer className="py-24 px-8 border-t border-theme-border/50 text-center glass mt-40">
+          <div className="max-w-2xl mx-auto opacity-40">
+            <p className="font-mono text-[9px] uppercase tracking-[0.8em] text-theme-mute mb-8 select-none">Artwork · Sensory Deconstruct v4.2</p>
+            <div className="flex flex-wrap justify-center gap-8 text-[9px] uppercase tracking-[0.4em] text-theme-mute font-bold">
+              <span className="hover:text-gold transition-colors cursor-help">Technical Repository</span>
+              <span className="hover:text-gold transition-colors cursor-help">Open Access Protocol</span>
+              <span className="hover:text-gold transition-colors cursor-help">MMXXIV</span>
+            </div>
           </div>
-        </div>
-      </footer>
+        </footer>
+      </main>
     </div>
   );
 }
 
-
-function TechnicalSegment({ icon, title, content }: { icon: any, title: string, content: string }) {
+function TechnicalSegment({ icon, title, content }: { icon: any; title: string; content: string }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4 text-theme-mute/30 uppercase tracking-[0.5em] text-[10px] font-bold">
@@ -432,4 +383,3 @@ function TechnicalSegment({ icon, title, content }: { icon: any, title: string, 
     </div>
   );
 }
-
