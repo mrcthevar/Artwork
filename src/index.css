@@ -1,0 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Cormorant Garamond", serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-gold: #C5A059;
+  --color-ink: #050505;
+}
+
+@layer base {
+  :root {
+    --bg-primary: 5 5 5;
+    --bg-secondary: 15 15 15;
+    --text-primary: 245 245 247;
+    --text-muted: 150 150 150;
+    --gold-accent: 197 160 89;
+    --border-color: 255 255 255 / 0.1;
+  }
+
+  :root.theme-day {
+    --bg-primary: 245 242 237;
+    --bg-secondary: 232 228 221;
+    --text-primary: 26 26 26;
+    --text-muted: 100 100 100;
+    --gold-accent: 140 110 40;
+    --border-color: 0 0 0 / 0.08;
+  }
+
+  body {
+    background-color: rgb(var(--bg-primary));
+    color: rgb(var(--text-primary));
+    transition: background-color 0.7s cubic-bezier(0.23, 1, 0.32, 1), color 0.7s cubic-bezier(0.23, 1, 0.32, 1);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+::selection {
+  background: var(--color-gold);
+  color: black;
+}
+
+/* Theme helper classes */
+.bg-theme-main { background-color: rgb(var(--bg-primary)); }
+.bg-theme-side { background-color: rgb(var(--bg-secondary)); }
+.text-theme-base { color: rgb(var(--text-primary)); }
+.text-theme-mute { color: rgb(var(--text-muted)); }
+.border-theme { border-color: rgb(var(--border-color)); }
+.text-gold { color: rgb(var(--gold-accent)); }
+
+.glass {
+  background: rgb(var(--text-primary) / 0.03);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgb(var(--text-primary) / 0.08);
+}

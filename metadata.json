@@ -1,0 +1,9 @@
+{
+  "name": "Visions of Light",
+  "description": "An interactive gallery exploring 1000 years of master paintings analyzed through the lens of cinematography and photography.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "AI Art Analysis",
+    "Digital Gallery"
+  ]
+}
